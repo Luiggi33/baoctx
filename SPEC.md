@@ -113,6 +113,10 @@ GOOS=linux   GOARCH=amd64 go build -o dist/baoctx-linux-amd64 .
 GOOS=windows GOARCH=amd64 go build -o dist/baoctx-windows-amd64.exe .
 ```
 
+## CI and release
+
+`.github/workflows/ci.yml`: on push to `main`, tags `v*`, and PRs, run `go vet` + `go test` on Linux and Windows, then build both binaries (uploaded as the `dist` artifact). Pushing a `v*` tag additionally creates a GitHub release with the binaries attached.
+
 ## Testing
 
 - Table tests: config validation (missing address, both/neither auth methods, unknown `env:` var) and per-shell export formatting including quoting of special characters.
