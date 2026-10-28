@@ -6,7 +6,14 @@ You list your instances in a config file and give each one a name. `baoctx use p
 
 ## Install
 
-There are no releases yet, so build it from source. You need Go 1.22 or newer.
+Download a prebuilt binary from the [latest release](https://github.com/Luiggi33/baoctx/releases) (for example [v0.1.0](https://github.com/Luiggi33/baoctx/releases/tag/v0.1.0)). It has `baoctx-linux-amd64` and `baoctx-windows-amd64.exe`. On Linux:
+
+```
+curl -L -o baoctx https://github.com/Luiggi33/baoctx/releases/download/v0.1.0/baoctx-linux-amd64
+chmod +x baoctx
+```
+
+Or build it from source. You need Go 1.22 or newer.
 
 ```
 go build -o baoctx .
