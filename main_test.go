@@ -29,6 +29,11 @@ func TestValidate(t *testing.T) {
 		{"token+username", Context{Address: "a", Token: "t", Username: "u"}, "not both"},
 		{"user only", Context{Address: "a", Username: "u"}, "together"},
 		{"password only", Context{Address: "a", Password: "p"}, "together"},
+		{"ldap", Context{Address: "a", Username: "u", Password: "p", Method: "ldap", Mount: "corp/ldap"}, ""},
+		{"env method", Context{Address: "a", Username: "u", Password: "p", Method: "env:M"}, ""},
+		{"unknown method", Context{Address: "a", Username: "u", Password: "p", Method: "approle"}, "unknown method"},
+		{"token+method", Context{Address: "a", Token: "t", Method: "ldap"}, "only apply"},
+		{"token+mount", Context{Address: "a", Token: "t", Mount: "m"}, "only apply"},
 	}
 	for _, tt := range tests {
 		err := tt.c.validate()
@@ -100,14 +105,18 @@ func TestFormat(t *testing.T) {
 	}
 }
 
-// loginServer answers userpass logins for user "a/b" with password "pw".
+// loginServer answers logins on the userpass, ldap and team/ldap mounts for user "a/b" with password "pw".
 func loginServer(t *testing.T, ns *string) *httptest.Server {
 	t.Helper()
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		*ns = r.Header.Get("X-Vault-Namespace")
 		var body struct{ Password string }
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		if r.Method != "POST" || r.URL.EscapedPath() != "/v1/auth/userpass/login/a%2Fb" || body.Password != "pw" {
+		ok := false
+		for _, m := range []string{"userpass", "ldap", "team/ldap"} {
+			ok = ok || r.URL.EscapedPath() == "/v1/auth/"+m+"/login/a%2Fb"
+		}
+		if r.Method != "POST" || !ok || body.Password != "pw" {
 			w.WriteHeader(403)
 			fmt.Fprint(w, "SECRET-DETAIL")
 			return
@@ -133,6 +142,21 @@ func TestLogin(t *testing.T) {
 	}
 	if ns != "" {
 		t.Errorf("namespace header sent without namespace: %q", ns)
+	}
+
+	for _, c := range []Context{{Method: "ldap"}, {Mount: "/team/ldap/"}, {Method: "okta", Mount: "ldap"}} {
+		c.Address, c.Username, c.Password = s.URL, "a/b", "pw"
+		if tok, err := login(c); err != nil || tok != "tok-123" {
+			t.Errorf("%+v: got %q, %v", c, tok, err)
+		}
+	}
+	// okta defaults to the okta mount, which the server doesn't have
+	if _, err := login(Context{Address: s.URL, Username: "a/b", Password: "pw", Method: "okta"}); err == nil {
+		t.Error("okta default mount should miss")
+	}
+	var u usageError
+	if _, err := login(Context{Address: s.URL, Username: "a/b", Password: "pw", Method: "bogus"}); !errors.As(err, &u) {
+		t.Errorf("bad method: want usage error, got %v", err)
 	}
 }
 

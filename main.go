@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,7 +35,12 @@ type Context struct {
 	Token     string `json:"token"`
 	Username  string `json:"username"`
 	Password  string `json:"password"`
+	Method    string `json:"method"`
+	Mount     string `json:"mount"`
 }
+
+// loginMethods all log in via POST /v1/auth/<mount>/login/<username> with a password.
+var loginMethods = []string{"userpass", "ldap", "okta", "radius"}
 
 type Config struct {
 	Contexts map[string]Context `json:"contexts"`
@@ -265,12 +271,16 @@ func (c Context) validate() error {
 		return errors.New("token or username+password is required")
 	case c.Token == "" && (c.Username == "" || c.Password == ""):
 		return errors.New("username and password must be set together")
+	case c.Token != "" && (c.Method != "" || c.Mount != ""):
+		return errors.New("method and mount only apply to username+password")
+	case c.Method != "" && !strings.HasPrefix(c.Method, "env:") && !slices.Contains(loginMethods, c.Method):
+		return fmt.Errorf("unknown method %q (want %s)", c.Method, strings.Join(loginMethods, ", "))
 	}
 	return nil
 }
 
 func (c *Context) fields() []*string {
-	return []*string{&c.Address, &c.Namespace, &c.Token, &c.Username, &c.Password}
+	return []*string{&c.Address, &c.Namespace, &c.Token, &c.Username, &c.Password, &c.Method, &c.Mount}
 }
 
 // overlay returns c with every non-empty field of o taking precedence.
@@ -297,8 +307,13 @@ func (c Context) resolve() (Context, error) {
 
 // login performs a userpass login and returns the client token.
 func login(c Context) (string, error) {
+	method := cmp.Or(c.Method, "userpass")
+	if !slices.Contains(loginMethods, method) { // also catches an env: value that resolved to junk
+		return "", usageErr("unknown method %q (want %s)", method, strings.Join(loginMethods, ", "))
+	}
+	mount := strings.Trim(cmp.Or(c.Mount, method), "/")
 	body, _ := json.Marshal(map[string]string{"password": c.Password})
-	req, err := http.NewRequest("POST", strings.TrimRight(c.Address, "/")+"/v1/auth/userpass/login/"+url.PathEscape(c.Username), bytes.NewReader(body))
+	req, err := http.NewRequest("POST", strings.TrimRight(c.Address, "/")+"/v1/auth/"+mount+"/login/"+url.PathEscape(c.Username), bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("login: %w", err)
 	}

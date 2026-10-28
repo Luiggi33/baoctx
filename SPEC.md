@@ -6,7 +6,7 @@
 
 - Very simple and lightweight: one static binary, Go stdlib only, no runtime.
 - Works on Linux and Windows (bash, zsh, fish, PowerShell, cmd).
-- Contexts configured with address, namespace, and either a token or username + password.
+- Contexts configured with address, namespace, and either a token or username + password (login method and mount configurable).
 - `VAULT_*` compatibility variables.
 
 ## Non-goals (v1)
@@ -62,6 +62,10 @@ contexts:
 | `token`     | *        | Use this **or** `username` + `password`, exactly one method.  |
 | `username`  | *        | Userpass auth; requires `password`.                           |
 | `password`  | *        | Userpass auth; requires `username`.                           |
+| `method`    | no       | Login method for `username`+`password`: `userpass` (default), `ldap`, `okta` or `radius`. Like `bao login -method`. |
+| `mount`     | no       | Auth mount path; defaults to the method name. Like `bao login -mount`. May be nested (`team/ldap`). |
+
+`method` and `mount` are only valid together with `username`+`password`, not with `token`. An unknown `method` is a config error.
 
 Validated on load; a context violating the table is a config error (exit 2). Any string value of the form `env:VAR` is replaced by the value of environment variable `VAR` at use time (config error, exit 2, if unset).
 
@@ -84,7 +88,7 @@ Stdout carries only machine-consumable output (`use`, `init`, `list`, `current`)
 Shared by `use` and `exec`:
 
 1. Context has `token` → use it as-is.
-2. Context has `username` + `password` → `POST {address}/v1/auth/userpass/login/{username}` with JSON body `{"password": "..."}` and header `X-Vault-Namespace: <namespace>` when set. The token is `auth.client_token` from the response.
+2. Context has `username` + `password` → `POST {address}/v1/auth/{mount}/login/{username}` (`mount` defaults to `method`, which defaults to `userpass`; leading/trailing `/` in `mount` are trimmed) with JSON body `{"password": "..."}` and header `X-Vault-Namespace: <namespace>` when set. The token is `auth.client_token` from the response.
 
 No caching: every `use`/`exec` with username/password performs one login. `net/http` with a 10 s timeout. Non-2xx responses are runtime errors (exit 1); the response body is not echoed (may contain sensitive detail), only the status code.
 
@@ -120,7 +124,7 @@ GOOS=windows GOARCH=amd64 go build -o dist/baoctx-windows-amd64.exe .
 ## Testing
 
 - Table tests: config validation (missing address, both/neither auth methods, unknown `env:` var) and per-shell export formatting including quoting of special characters.
-- `httptest` server for the userpass login path (success, non-2xx, namespace header sent).
+- `httptest` server for the login path (success, non-2xx, namespace header sent, default and custom `method`/`mount`).
 - Manual: `eval "$(baoctx use prod)"` then `bao status`; `baoctx exec staging -- bao status`.
 
 ## Security notes

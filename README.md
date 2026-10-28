@@ -2,7 +2,7 @@
 
 Switch between OpenBao instances from the command line, like `kubectx` does for Kubernetes.
 
-You list your instances in a config file and give each one a name. `baoctx use prod` then sets `BAO_ADDR`, `BAO_NAMESPACE` and `BAO_TOKEN` in your shell. The `VAULT_*` variables are set too. If a context has a username and password instead of a token, baoctx logs in with userpass and uses the token it gets back.
+You list your instances in a config file and give each one a name. `baoctx use prod` then sets `BAO_ADDR`, `BAO_NAMESPACE` and `BAO_TOKEN` in your shell. The `VAULT_*` variables are set too. If a context has a username and password instead of a token, baoctx logs in with it (userpass by default) and uses the token it gets back.
 
 ## Install
 
@@ -60,6 +60,18 @@ contexts:
 If both a JSON and a YAML file exist, they are merged per context and per field, and the YAML value wins where both set the same field. A `BAOCTX_CONFIG` file is used on its own, and a `.yaml`/`.yml` extension selects the YAML parser.
 
 `address` is required. `namespace` is optional. Use either `token` or `username` + `password`, not both.
+
+With `username` + `password` you can also set `method` (`userpass` (default), `ldap`, `okta` or `radius`) and `mount`, like `bao login -method=… -mount=…`. `mount` defaults to the method name and may be nested:
+
+```yaml
+contexts:
+  corp:
+    address: https://bao.example.com:8200
+    method: ldap
+    mount: corp/ldap
+    username: alice
+    password: env:CORP_PASSWORD
+```
 
 A value like `env:PROD_TOKEN` is read from that environment variable when you use the context. Prefer it for secrets. Any value written directly in the file is stored as plain text, so on Linux keep the file at `chmod 600`.
 
